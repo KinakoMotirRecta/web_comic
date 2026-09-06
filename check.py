@@ -89,6 +89,63 @@ def parse_rss(raw):
     return text_of(channel, "title"), episodes
 
 
+def rss_episodes(feed):
+    """RSS/Atom を配信しているサイト（GigaViewer 系など）。"""
+    _, episodes = parse_rss(fetch(feed["url"]))
+    return episodes
+
+
+COMICWALKER_API = "https://comic-walker.com/api/contents/details/work?workCode={}"
+COMICWALKER_EPISODE = "https://comic-walker.com/detail/{}/episodes/{}"
+
+
+def comicwalker_episodes(feed):
+    """カドコミ（コミックウォーカー）は RSS が無いので、サイトが使う公開JSON APIを読む。"""
+    work_code = feed["workCode"]
+    data = json.loads(fetch(COMICWALKER_API.format(work_code)))
+    authors = "・".join(
+        author.get("name", "") for author in data["work"].get("authors", [])
+    )
+
+    episodes = []
+    for item in data["latestEpisodes"]["result"]:
+        if not item.get("isActive", True):
+            continue  # 配信が終了した話は通知しない
+        try:
+            published_at = datetime.fromisoformat(
+                item["updateDate"].replace("Z", "+00:00")
+            )
+        except (KeyError, ValueError, AttributeError):
+            published_at = None
+
+        episodes.append({
+            "key": item["code"],
+            "title": item.get("title") or "（無題）",
+            "link": COMICWALKER_EPISODE.format(work_code, item["code"]),
+            "author": authors,
+            "thumbnail": item.get("thumbnail", ""),
+            "published_at": published_at,
+        })
+
+    # 通知は古い順に出す
+    episodes.sort(key=lambda e: e["published_at"] or datetime.min.replace(tzinfo=timezone.utc))
+    return episodes
+
+
+SOURCES = {
+    "rss": rss_episodes,
+    "comicwalker": comicwalker_episodes,
+}
+
+
+def load_episodes(feed):
+    """feeds.json の type に応じた取得処理を選ぶ。type 省略時は rss。"""
+    source = feed.get("type", "rss")
+    if source not in SOURCES:
+        raise ValueError(f"未知の type: {source}（使えるのは {', '.join(SOURCES)}）")
+    return SOURCES[source](feed)
+
+
 def build_payload(feed, episode):
     embed = {
         "title": episode["title"],
@@ -192,7 +249,7 @@ def main():
         feed_id = feed["id"]
         log(f"[{feed['name']}]")
         try:
-            _, episodes = parse_rss(fetch(feed["url"]))
+            episodes = load_episodes(feed)
         except Exception as error:
             log(f"  取得/解析に失敗: {error}")
             failed.append(feed["name"])

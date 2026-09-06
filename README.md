@@ -37,7 +37,9 @@ GitHub Actions (1日3回)
 
 ## 監視作品を追加する
 
-`feeds.json` に追記して push するだけ。
+`feeds.json` に追記して push するだけ。サイトの種類に応じて `type` を選ぶ。
+
+### RSS があるサイト（`type` 省略）
 
 ```json
 {
@@ -48,9 +50,33 @@ GitHub Actions (1日3回)
 }
 ```
 
-RSS の URL は、作品の話ページを開いてページのソースから `application/rss+xml` を検索すると見つかる。
+RSS の URL は、作品の話ページのソースから `application/rss+xml` を検索すると見つかる。
 GigaViewer 採用サイト（ジャンプ+、となりのヤングジャンプ、くらげバンチ、COMIC Y-OURS など）は
 `https://<サイト>/rss/series/<シリーズID>` の形式で統一されている。
+
+ジャンプ+ には `?free_only=1` を付けた無料話限定フィードもある。
+
+### カドコミ / コミックウォーカー（`type: comicwalker`）
+
+RSS が無いため、サイト自身が使っている公開 JSON API を読む。
+
+```json
+{
+  "id": "一意なID",
+  "type": "comicwalker",
+  "name": "作品名 / 作者名",
+  "workCode": "KC_020003_S",
+  "site": "カドコミ"
+}
+```
+
+`workCode` は作品ページの URL `https://comic-walker.com/detail/<workCode>` から取れる。
+
+### 対応していないサイトの場合
+
+`check.py` の `SOURCES` に取得関数を1つ足せば対応できる。関数は
+`{key, title, link, author, thumbnail, published_at}` を持つ辞書のリストを、
+**古い順**で返せばよい。
 
 ## 実行タイミングを変える
 
