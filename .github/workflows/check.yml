@@ -1,0 +1,61 @@
+name: マンガ更新チェック
+
+on:
+  schedule:
+    # JST 12:15 / 18:15 / 24:15 （GigaViewer の更新は JST 12:00 が多い）
+    # GitHub の cron は混雑時に数分〜十数分遅れることがある
+    - cron: '15 3,9,15 * * *'
+  workflow_dispatch:
+    inputs:
+      test_post:
+        description: '新着が無くても最新1話を投稿する（疎通確認用）'
+        type: boolean
+        default: false
+
+# seen.json をコミットして push するために必要
+permissions:
+  contents: write
+
+# 手動実行とスケジュールが重なっても二重投稿しないようにする
+concurrency:
+  group: comic-check
+  cancel-in-progress: false
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: 更新チェックと通知
+        env:
+          DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
+          TEST_POST: ${{ inputs.test_post && '1' || '0' }}
+        run: python check.py
+
+      - name: 既読状態を保存
+        run: |
+          if [ -z "$(git status --porcelain seen.json)" ]; then
+            echo "変更なし。コミットをスキップする"
+            exit 0
+          fi
+          git config user.name  'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add seen.json
+          git commit -m 'chore: 既読状態を更新'
+          # 実行が重なった場合に備えてリトライしながら push する
+          for attempt in 1 2 3; do
+            if git push; then
+              exit 0
+            fi
+            echo "push に失敗（$attempt/3）。rebase して再試行する"
+            git pull --rebase --autostash
+            sleep 3
+          done
+          exit 1
