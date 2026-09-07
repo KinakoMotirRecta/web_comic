@@ -1,8 +1,15 @@
 {
   "feeds": {
+    "bokudakeno-amakute-kowai-manager": [
+      "KC_0200030000200011_E",
+      "KC_0200030000300011_E"
+    ],
     "kaikaikaikai": [
       "comic_yours:episode:12207421983786038824",
       "comic_yours:episode:12207421983786038829"
+    ],
+    "noisering": [
+      "jump_plus:episode:9253191256340472382"
     ]
   },
   "heartbeat": "2026-09-07"
