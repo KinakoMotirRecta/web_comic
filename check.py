@@ -17,6 +17,7 @@ import urllib.error
 import urllib.request
 from datetime import datetime, timedelta, timezone
 from email.utils import parsedate_to_datetime
+from html.parser import HTMLParser
 from pathlib import Path
 from xml.etree import ElementTree
 
@@ -132,9 +133,100 @@ def comicwalker_episodes(feed):
     return episodes
 
 
+YANMAGA_SERIES = "https://yanmaga.jp/comics/{}?sort=newer"
+YANMAGA_ORIGIN = "https://yanmaga.jp"
+
+
+class YanmagaEpisodeParser(HTMLParser):
+    """ヤンマガWeb の作品ページから li.mod-episode-item を拾う。
+
+    話一覧は HTML に直接埋まっていて、各 li が
+    data-episode-title / data-original-url を持つ。
+    公開日は中の time.mod-episode-date、サムネは最初の img。
+    """
+
+    def __init__(self):
+        super().__init__(convert_charrefs=True)
+        self.episodes = []
+        self._current = None
+        self._depth = 0
+        self._in_date = False
+
+    def handle_starttag(self, tag, attrs):
+        attrs = dict(attrs)
+        classes = (attrs.get("class") or "").split()
+
+        if tag == "li" and "mod-episode-item" in classes:
+            self._current = {
+                "title": (attrs.get("data-episode-title") or "").strip(),
+                "path": attrs.get("data-original-url") or "",
+                "thumbnail": "",
+                "date": "",
+            }
+            self._depth = 1
+            return
+
+        if self._current is None:
+            return
+        if tag == "li":
+            self._depth += 1
+        elif tag == "img" and not self._current["thumbnail"]:
+            self._current["thumbnail"] = attrs.get("src") or ""
+        elif tag == "time" and "mod-episode-date" in classes:
+            self._in_date = True
+
+    def handle_endtag(self, tag):
+        if self._current is None:
+            return
+        if tag == "time":
+            self._in_date = False
+        elif tag == "li":
+            self._depth -= 1
+            if self._depth == 0:
+                self.episodes.append(self._current)
+                self._current = None
+
+    def handle_data(self, data):
+        if self._in_date and self._current is not None:
+            self._current["date"] += data.strip()
+
+
+def yanmaga_episodes(feed):
+    """ヤンマガWeb も RSS が無いので、作品ページの HTML から話一覧を取り出す。"""
+    parser = YanmagaEpisodeParser()
+    parser.feed(fetch(YANMAGA_SERIES.format(feed["comicCode"])).decode("utf-8", "replace"))
+
+    episodes = []
+    for item in parser.episodes:
+        if not item["path"]:
+            continue
+        try:
+            published_at = datetime.strptime(item["date"], "%Y/%m/%d").replace(tzinfo=JST)
+        except ValueError:
+            published_at = None
+
+        episodes.append({
+            "key": item["path"],
+            "title": item["title"] or "（無題）",
+            "link": YANMAGA_ORIGIN + item["path"],
+            "author": feed.get("author", ""),
+            # サムネは幅指定のクエリが付くので、そのまま使う
+            "thumbnail": item["thumbnail"],
+            "published_at": published_at,
+        })
+
+    if not episodes:
+        raise ValueError("話一覧が取れなかった（ページ構造が変わった可能性）")
+
+    # sort=newer で取っているので、通知用に古い順へ反転する
+    episodes.reverse()
+    return episodes
+
+
 SOURCES = {
     "rss": rss_episodes,
     "comicwalker": comicwalker_episodes,
+    "yanmaga": yanmaga_episodes,
 }
 
 

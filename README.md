@@ -72,6 +72,26 @@ RSS が無いため、サイト自身が使っている公開 JSON API を読む
 
 `workCode` は作品ページの URL `https://comic-walker.com/detail/<workCode>` から取れる。
 
+### ヤンマガWeb（`type: yanmaga`）
+
+RSS も API も無いため、作品ページの HTML から話一覧を取り出す。
+
+```json
+{
+  "id": "一意なID",
+  "type": "yanmaga",
+  "name": "作品名 / 作者名",
+  "comicCode": "GLITCH_WITCH",
+  "author": "作者名",
+  "site": "ヤンマガWeb"
+}
+```
+
+`comicCode` は作品ページの URL `https://yanmaga.jp/comics/<comicCode>` から取れる。
+作者名はページから取らず `author` に手で書く（HTML構造への依存を減らすため）。
+
+一覧は新着順の1ページ目（10話程度）だけを見る。更新検知には十分。
+
 ### 対応していないサイトの場合
 
 `check.py` の `SOURCES` に取得関数を1つ足せば対応できる。関数は

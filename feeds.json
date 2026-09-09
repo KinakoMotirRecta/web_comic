@@ -7,6 +7,12 @@
       "site": "COMIC Y-OURS"
     },
     {
+      "id": "excel-saga",
+      "name": "エクセル・サーガ / 六道神士",
+      "url": "https://comic-y-ours.com/rss/series/2551460909770028980",
+      "site": "COMIC Y-OURS"
+    },
+    {
       "id": "noisering",
       "name": "ノイズリング / 安芸勘谷・翼",
       "url": "https://shonenjumpplus.com/rss/series/9253191256340442491",
@@ -18,6 +24,14 @@
       "name": "僕だけの甘くてこわいマネージャーさんたち / 生瓶鵜義",
       "workCode": "KC_020003_S",
       "site": "カドコミ"
+    },
+    {
+      "id": "glitch-witch",
+      "type": "yanmaga",
+      "name": "GLITCH WITCH / 士郎正宗・東直輝",
+      "comicCode": "GLITCH_WITCH",
+      "author": "士郎正宗・東直輝",
+      "site": "ヤンマガWeb"
     }
   ]
 }
