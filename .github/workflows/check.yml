@@ -39,7 +39,9 @@ jobs:
           TEST_POST: ${{ inputs.test_post && '1' || '0' }}
         run: python check.py
 
+      # 途中で失敗しても、そこまでの既読と失敗状態は残す
       - name: 既読状態を保存
+        if: always()
         run: |
           if [ -z "$(git status --porcelain seen.json)" ]; then
             echo "変更なし。コミットをスキップする"
@@ -59,3 +61,36 @@ jobs:
             sleep 3
           done
           exit 1
+
+      # check.py が異常終了した場合や push に失敗した場合は、スクリプトからは
+      # 通知が出せない。ログを見なくても気づけるよう、ここで拾って通知する。
+      - name: ワークフローの失敗を通知
+        if: failure()
+        env:
+          DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          python3 - <<'PY'
+          import json, os, urllib.request
+
+          payload = {
+              "username": "マンガ更新",
+              "content": "🚨 **更新チェックの処理自体が失敗しました**",
+              "embeds": [{
+                  "title": "実行ログを開く",
+                  "url": os.environ["RUN_URL"],
+                  "description": (
+                      "スクリプトの異常終了、または既読状態の保存に失敗した。\n"
+                      "**更新を見逃している可能性があるので確認を。**"
+                  ),
+                  "color": 0xE74C3C,
+              }],
+              "allowed_mentions": {"parse": []},
+          }
+          request = urllib.request.Request(
+              os.environ["DISCORD_WEBHOOK_URL"],
+              data=json.dumps(payload, ensure_ascii=False).encode("utf-8"),
+              headers={"Content-Type": "application/json"},
+          )
+          urllib.request.urlopen(request, timeout=30)
+          PY

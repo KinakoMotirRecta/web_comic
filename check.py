@@ -27,9 +27,13 @@ SEEN_PATH = ROOT / "seen.json"
 
 USER_AGENT = "web-comic-notifier/1.0"
 EMBED_COLOR = 0x5865F2
+ERROR_COLOR = 0xE74C3C
+RECOVERY_COLOR = 0x57F287
 POST_INTERVAL = 1.0        # Discord のレート制限対策（秒）
 MAX_POSTS_PER_FEED = 5     # 1フィードあたりの1回の投稿上限（事故時の連投防止）
 HEARTBEAT_DAYS = 20        # スケジュールの自動停止を防ぐため、この間隔で必ず1回コミットする
+FAILURE_NOTIFY_AFTER = 2   # 連続でこの回数失敗したら通知する（一時的な通信エラーで騒がないため）
+FAILURE_RENOTIFY_HOURS = 24  # 直らないまま続く場合の再通知間隔
 JST = timezone(timedelta(hours=9))
 
 
@@ -261,6 +265,60 @@ def build_payload(feed, episode):
     }
 
 
+def source_hint(feed):
+    """どこを見に行って失敗したのかが分かる文字列。"""
+    return feed.get("url") or feed.get("workCode") or feed.get("comicCode") or "(不明)"
+
+
+def jst_text(iso_text):
+    try:
+        return datetime.fromisoformat(iso_text).astimezone(JST).strftime("%Y/%m/%d %H:%M")
+    except (TypeError, ValueError):
+        return "不明"
+
+
+def build_error_payload(feed, entry):
+    return {
+        "username": "マンガ更新",
+        "content": f"⚠️ **{feed['name']}** の更新チェックに失敗しています",
+        "embeds": [{
+            "title": "更新チェックに失敗",
+            "description": (
+                "サイトの構造変更・アクセス制限・一時的な障害などが考えられる。\n"
+                "**この作品の更新を見逃している可能性があるので、手動で確認を。**\n"
+                f"```\n{entry['reason']}\n```"
+            ),
+            "color": ERROR_COLOR,
+            "author": {"name": feed["name"]},
+            "footer": {"text": feed.get("site", "")},
+            "fields": [
+                {"name": "連続失敗", "value": f"{entry['count']} 回", "inline": True},
+                {"name": "最初の失敗", "value": jst_text(entry["since"]), "inline": True},
+                {"name": "監視元", "value": source_hint(feed), "inline": False},
+            ],
+        }],
+        "allowed_mentions": {"parse": []},
+    }
+
+
+def build_recovery_payload(feed, entry):
+    return {
+        "username": "マンガ更新",
+        "content": f"✅ **{feed['name']}** の更新チェックが復旧しました",
+        "embeds": [{
+            "title": "復旧",
+            "description": "止まっていた間に公開された話があれば、続けて通知される。",
+            "color": RECOVERY_COLOR,
+            "author": {"name": feed["name"]},
+            "footer": {"text": feed.get("site", "")},
+            "fields": [
+                {"name": "失敗していた期間", "value": f"{jst_text(entry['since'])} 〜", "inline": False},
+            ],
+        }],
+        "allowed_mentions": {"parse": []},
+    }
+
+
 def post_to_discord(webhook_url, payload, attempts=4):
     """Discord に投稿する。429 が返ったら retry_after ぶん待って再試行する。"""
     body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
@@ -317,6 +375,48 @@ def touch_heartbeat(state):
         log(f"heartbeat を更新: {state['heartbeat']}")
 
 
+def record_failure(state, feed, error):
+    """失敗を記録し、いま通知すべきなら失敗の内容を返す。不要なら None。
+
+    一時的な通信エラーで騒がないよう連続 FAILURE_NOTIFY_AFTER 回までは黙り、
+    直らない場合も FAILURE_RENOTIFY_HOURS おきに1回しか通知しない。
+    """
+    now = datetime.now(timezone.utc)
+    entry = state["failures"].get(feed["id"], {})
+    entry["count"] = entry.get("count", 0) + 1
+    entry.setdefault("since", now.isoformat())
+    entry["reason"] = f"{type(error).__name__}: {error}"[:400]
+    state["failures"][feed["id"]] = entry
+
+    if entry["count"] < FAILURE_NOTIFY_AFTER:
+        log(f"  （連続 {entry['count']} 回目。{FAILURE_NOTIFY_AFTER} 回で通知する）")
+        return None
+
+    notified_at = entry.get("notified_at")
+    if notified_at:
+        try:
+            elapsed = now - datetime.fromisoformat(notified_at)
+        except ValueError:
+            elapsed = timedelta(days=365)
+        if elapsed < timedelta(hours=FAILURE_RENOTIFY_HOURS):
+            log(f"  （通知済み。次の再通知まで {FAILURE_RENOTIFY_HOURS} 時間おき）")
+            return None
+
+    entry["notified_at"] = now.isoformat()
+    return entry
+
+
+def clear_failure(state, feed):
+    """失敗状態を解除し、復旧を通知すべきならその内容を返す。
+
+    通知するほど失敗が続いていなかった場合は、黙って消すだけにする。
+    """
+    entry = state["failures"].pop(feed["id"], None)
+    if entry and entry.get("notified_at"):
+        return entry
+    return None
+
+
 def main():
     dry_run = os.environ.get("DRY_RUN") == "1"
     test_post = os.environ.get("TEST_POST") == "1"
@@ -333,61 +433,80 @@ def main():
 
     state = load_json(SEEN_PATH, {})
     state.setdefault("feeds", {})
+    state.setdefault("failures", {})
 
     posted = 0
     failed = []
 
-    for feed in feeds:
-        feed_id = feed["id"]
-        log(f"[{feed['name']}]")
-        try:
-            episodes = load_episodes(feed)
-        except Exception as error:
-            log(f"  取得/解析に失敗: {error}")
-            failed.append(feed["name"])
-            continue
+    def send(payload, label):
+        """Discord へ1件送る。DRY_RUN のときは出力するだけ。"""
+        nonlocal posted
+        if dry_run:
+            log(f"  [DRY_RUN] {label}")
+        else:
+            post_to_discord(webhook_url, payload)
+            log(f"  {label}")
+            time.sleep(POST_INTERVAL)
+        posted += 1
 
-        log(f"  {len(episodes)} 話を取得")
-        first_run = feed_id not in state["feeds"]
-        known = set(state["feeds"].get(feed_id, []))
-        new_episodes = [episode for episode in episodes if episode["key"] not in known]
+    try:
+        for feed in feeds:
+            feed_id = feed["id"]
+            log(f"[{feed['name']}]")
 
-        if first_run:
-            # 初回は既存話をすべて既読にするだけ。過去話の一斉通知を防ぐ。
-            log(f"  初回登録。{len(episodes)} 話を既読として記録（通知なし）")
-            new_episodes = []
+            try:
+                episodes = load_episodes(feed)
+            except Exception as error:
+                log(f"  取得/解析に失敗: {error}")
+                failed.append(feed["name"])
+                entry = record_failure(state, feed, error)
+                if entry:
+                    send(build_error_payload(feed, entry), f"失敗を通知（連続 {entry['count']} 回）")
+                continue
 
-        if test_post and not new_episodes and episodes:
-            new_episodes = episodes[-1:]
-            log("  TEST_POST=1 のため最新1話を投稿する")
+            recovered = clear_failure(state, feed)
+            if recovered:
+                send(build_recovery_payload(feed, recovered), "復旧を通知")
 
-        if len(new_episodes) > MAX_POSTS_PER_FEED:
-            log(f"  新着 {len(new_episodes)} 件は多いため直近 {MAX_POSTS_PER_FEED} 件のみ投稿")
-            new_episodes = new_episodes[-MAX_POSTS_PER_FEED:]
+            log(f"  {len(episodes)} 話を取得")
+            first_run = feed_id not in state["feeds"]
+            known = set(state["feeds"].get(feed_id, []))
+            new_episodes = [episode for episode in episodes if episode["key"] not in known]
 
-        for episode in new_episodes:
-            payload = build_payload(feed, episode)
-            if dry_run:
-                log(f"  [DRY_RUN] {episode['title']} {episode['link']}")
-            else:
-                post_to_discord(webhook_url, payload)
-                log(f"  投稿: {episode['title']} {episode['link']}")
-                time.sleep(POST_INTERVAL)
-            posted += 1
+            if first_run:
+                # 初回は既存話をすべて既読にするだけ。過去話の一斉通知を防ぐ。
+                log(f"  初回登録。{len(episodes)} 話を既読として記録（通知なし）")
+                state["feeds"][feed_id] = [episode["key"] for episode in episodes]
+                new_episodes = []
 
-        if not new_episodes and not first_run:
-            log("  新着なし")
+            if test_post and not new_episodes and episodes:
+                new_episodes = episodes[-1:]
+                log("  TEST_POST=1 のため最新1話を投稿する")
 
-        # 取得に成功したフィードだけ既読を更新する
-        state["feeds"][feed_id] = [episode["key"] for episode in episodes]
+            if len(new_episodes) > MAX_POSTS_PER_FEED:
+                log(f"  新着 {len(new_episodes)} 件は多いため直近 {MAX_POSTS_PER_FEED} 件のみ投稿")
+                new_episodes = new_episodes[-MAX_POSTS_PER_FEED:]
 
-    touch_heartbeat(state)
-    save_state(state)
+            if not new_episodes and not first_run:
+                log("  新着なし")
 
-    log(f"完了: {posted} 件投稿 / {len(failed)} 件失敗")
-    if failed and len(failed) == len(feeds):
-        log("すべてのフィードで失敗した")
-        return 1
+            # 一覧から消えた話を落としつつ、通知が済んだ話だけを既読にしていく。
+            # 途中で Discord 側が落ちても、投稿済みの話を二重通知しない。
+            seen_now = [episode["key"] for episode in episodes if episode["key"] in known]
+            for episode in new_episodes:
+                send(build_payload(feed, episode), f"投稿: {episode['title']} {episode['link']}")
+                if episode["key"] not in seen_now:  # TEST_POST での再投稿は重複させない
+                    seen_now.append(episode["key"])
+            if not first_run:
+                state["feeds"][feed_id] = seen_now
+    finally:
+        # 途中で落ちても、そこまでの既読と失敗状態は必ず残す
+        touch_heartbeat(state)
+        save_state(state)
+
+    log(f"完了: {posted} 件送信 / {len(failed)} 件失敗")
+    if failed:
+        log("失敗: " + ", ".join(failed))
     return 0
 
 
