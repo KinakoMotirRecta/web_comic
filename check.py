@@ -32,7 +32,10 @@ RECOVERY_COLOR = 0x57F287
 POST_INTERVAL = 1.0        # Discord のレート制限対策（秒）
 MAX_POSTS_PER_FEED = 5     # 1フィードあたりの1回の投稿上限（事故時の連投防止）
 HEARTBEAT_DAYS = 20        # スケジュールの自動停止を防ぐため、この間隔で必ず1回コミットする
-FAILURE_NOTIFY_AFTER = 2   # 連続でこの回数失敗したら通知する（一時的な通信エラーで騒がないため）
+# 連続でこの回数失敗したら通知する。1日1回チェックなので、2にすると
+# 気づくまで2日かかってしまう。取得自体は1回の実行内で3回リトライしており、
+# 一時的な瞬断はここまで来ないため1で十分。
+FAILURE_NOTIFY_AFTER = 1
 FAILURE_RENOTIFY_HOURS = 24  # 直らないまま続く場合の再通知間隔
 JST = timezone(timedelta(hours=9))
 

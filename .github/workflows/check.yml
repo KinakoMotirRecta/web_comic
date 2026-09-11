@@ -2,9 +2,11 @@ name: マンガ更新チェック
 
 on:
   schedule:
-    # JST 12:15 / 18:15 / 24:15 （GigaViewer の更新は JST 12:00 が多い）
+    # JST 12:15 に1日1回。
+    # ジャンプ＋は 0:00、カドコミは 11:00 頃、GigaViewer 系は 12:00 に更新されるので、
+    # 昼過ぎの1回でその日の更新をまとめて拾える。
     # GitHub の cron は混雑時に数分〜十数分遅れることがある
-    - cron: '15 3,9,15 * * *'
+    - cron: '15 3 * * *'
   workflow_dispatch:
     inputs:
       test_post:
