@@ -1,6 +1,14 @@
 {
   "failures": {},
   "feeds": {
+    "100nen-ryuunen-elf": [
+      "/comics/100%E5%B9%B4%E7%95%99%E5%B9%B4%E3%81%97%E3%81%A6%E3%82%8B%E3%82%A8%E3%83%AB%E3%83%95/b04c060f24ef7a7478b2521926d60f98",
+      "/comics/100%E5%B9%B4%E7%95%99%E5%B9%B4%E3%81%97%E3%81%A6%E3%82%8B%E3%82%A8%E3%83%AB%E3%83%95/255f3143e5a95fbc850dc4e093d611b8",
+      "/comics/100%E5%B9%B4%E7%95%99%E5%B9%B4%E3%81%97%E3%81%A6%E3%82%8B%E3%82%A8%E3%83%AB%E3%83%95/701a4ec6028ac4a28f2c136528ff62b0",
+      "/comics/100%E5%B9%B4%E7%95%99%E5%B9%B4%E3%81%97%E3%81%A6%E3%82%8B%E3%82%A8%E3%83%AB%E3%83%95/e156f1d39eb04f4c1aeebe673c3f55c5",
+      "/comics/100%E5%B9%B4%E7%95%99%E5%B9%B4%E3%81%97%E3%81%A6%E3%82%8B%E3%82%A8%E3%83%AB%E3%83%95/8cdf51efb0851d1ea85303bdff507af3",
+      "/comics/100%E5%B9%B4%E7%95%99%E5%B9%B4%E3%81%97%E3%81%A6%E3%82%8B%E3%82%A8%E3%83%AB%E3%83%95/786b7c9a16bc33729b462f70ba4a922d"
+    ],
     "bokudakeno-amakute-kowai-manager": [
       "KC_0200030000200011_E",
       "KC_0200030000300011_E"
@@ -56,7 +64,8 @@
       "comic_yours:episode:2551460909787971061",
       "comic_yours:episode:2551460909787971070",
       "comic_yours:episode:2551460909787971076",
-      "comic_yours:episode:2551460909787971080"
+      "comic_yours:episode:2551460909787971080",
+      "comic_yours:episode:2551460909787971084"
     ],
     "glitch-witch": [
       "/comics/GLITCH_WITCH/025b2fc8492c51937ce6bd4a529e8f8a",
@@ -67,7 +76,8 @@
     ],
     "kaikaikaikai": [
       "comic_yours:episode:12207421983786038824",
-      "comic_yours:episode:12207421983786038829"
+      "comic_yours:episode:12207421983786038829",
+      "comic_yours:episode:12207421983786038833"
     ],
     "mayori-no-gakkou": [
       "jump_plus:episode:9253191255890793890",
@@ -78,7 +88,8 @@
     ],
     "noisering": [
       "jump_plus:episode:9253191256340472382",
-      "jump_plus:episode:9253191256479733856"
+      "jump_plus:episode:9253191256479733856",
+      "jump_plus:episode:9253191256637716010"
     ],
     "ruri-dragon": [
       "jump_plus:episode:17106371853091617526",
