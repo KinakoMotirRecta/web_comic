@@ -15,6 +15,7 @@ import sys
 import time
 import urllib.error
 import urllib.request
+from urllib.parse import quote, unquote
 from datetime import datetime, timedelta, timezone
 from email.utils import parsedate_to_datetime
 from html.parser import HTMLParser
@@ -201,7 +202,10 @@ class YanmagaEpisodeParser(HTMLParser):
 def yanmaga_episodes(feed):
     """ヤンマガWeb も RSS が無いので、作品ページの HTML から話一覧を取り出す。"""
     parser = YanmagaEpisodeParser()
-    parser.feed(fetch(YANMAGA_SERIES.format(feed["comicCode"])).decode("utf-8", "replace"))
+    # 作品コードは日本語のこともある。feeds.json には日本語でもエンコード済みでも書けるよう、
+    # 一度デコードしてからエンコードし直す（二重エンコードを防ぐ）
+    comic_code = quote(unquote(feed["comicCode"]), safe="")
+    parser.feed(fetch(YANMAGA_SERIES.format(comic_code)).decode("utf-8", "replace"))
 
     episodes = []
     for item in parser.episodes:

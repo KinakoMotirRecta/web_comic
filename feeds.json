@@ -50,6 +50,14 @@
       "comicCode": "GLITCH_WITCH",
       "author": "士郎正宗・東直輝",
       "site": "ヤンマガWeb"
+    },
+    {
+      "id": "100nen-ryuunen-elf",
+      "type": "yanmaga",
+      "name": "100年留年してるエルフ / フタロウ",
+      "comicCode": "100年留年してるエルフ",
+      "author": "フタロウ",
+      "site": "ヤンマガWeb"
     }
   ]
 }

@@ -89,4 +89,4 @@ Windows のコンソールでは日本語が化けるので `PYTHONIOENCODING=ut
 - `actions/checkout` の `persist-credentials`（既定 true）に依存して `seen.json` を push している。
   バージョンを上げるときはこの既定値が変わっていないか確認する。
 - `permissions: contents: write` が必要。
-- 実行時刻はUTC指定。JSTから9時間引く。GitHubのcronは混雑時に数分〜十数分遅れる。
+- 実行時刻はUTC指定。JSTから9時間引く。GitHubのcronは大きく遅れ、12:15 JST 指定で実際は 17時前後に動く（2026年9月の実績で4〜5時間遅れ）。
