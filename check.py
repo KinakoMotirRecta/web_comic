@@ -151,6 +151,12 @@ class YanmagaEpisodeParser(HTMLParser):
     話一覧は HTML に直接埋まっていて、各 li が
     data-episode-title / data-original-url を持つ。
     公開日は中の time.mod-episode-date、サムネは最初の img。
+
+    **未公開の話も li として先に入っている。** 公開済みは中の div が
+    mod-episode-public、未公開は mod-episode-nopublic になる。
+    タイトルもURLも入っているため、この違いを見ないと未公開話を通知してしまう。
+    構造が変わって印が読めなくなったときは未公開扱いにする（誤って通知するより、
+    1話も取れずに失敗として鳴らすほうが安全）。
     """
 
     def __init__(self):
@@ -170,6 +176,7 @@ class YanmagaEpisodeParser(HTMLParser):
                 "path": attrs.get("data-original-url") or "",
                 "thumbnail": "",
                 "date": "",
+                "published": False,
             }
             self._depth = 1
             return
@@ -178,6 +185,8 @@ class YanmagaEpisodeParser(HTMLParser):
             return
         if tag == "li":
             self._depth += 1
+        elif tag == "div" and "mod-episode-public" in classes:
+            self._current["published"] = True
         elif tag == "img" and not self._current["thumbnail"]:
             self._current["thumbnail"] = attrs.get("src") or ""
         elif tag == "time" and "mod-episode-date" in classes:
@@ -208,8 +217,13 @@ def yanmaga_episodes(feed):
     parser.feed(fetch(YANMAGA_SERIES.format(comic_code)).decode("utf-8", "replace"))
 
     episodes = []
+    skipped = 0
     for item in parser.episodes:
         if not item["path"]:
+            continue
+        if not item["published"]:
+            # 「次回公開予定」として先に並んでいる未公開話
+            skipped += 1
             continue
         try:
             published_at = datetime.strptime(item["date"], "%Y/%m/%d").replace(tzinfo=JST)
@@ -226,8 +240,11 @@ def yanmaga_episodes(feed):
             "published_at": published_at,
         })
 
+    if skipped:
+        log(f"  未公開の話を {skipped} 件除外した")
+
     if not episodes:
-        raise ValueError("話一覧が取れなかった（ページ構造が変わった可能性）")
+        raise ValueError("公開済みの話が1件も取れなかった（ページ構造が変わった可能性）")
 
     # sort=newer で取っているので、通知用に古い順へ反転する
     episodes.reverse()
@@ -246,7 +263,16 @@ def load_episodes(feed):
     source = feed.get("type", "rss")
     if source not in SOURCES:
         raise ValueError(f"未知の type: {source}（使えるのは {', '.join(SOURCES)}）")
-    return SOURCES[source](feed)
+
+    episodes = SOURCES[source](feed)
+
+    # 公開日が未来の話は通知しない。サイトが未公開話を先に一覧へ載せることがあるため、
+    # 取得方法によらない安全網として全 type に掛ける。
+    now = datetime.now(timezone.utc)
+    published = [e for e in episodes if not (e["published_at"] and e["published_at"] > now)]
+    if len(published) != len(episodes):
+        log(f"  公開日が未来の話を {len(episodes) - len(published)} 件除外した")
+    return published
 
 
 def build_payload(feed, episode):
