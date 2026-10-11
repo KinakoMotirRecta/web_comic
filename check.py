@@ -45,9 +45,9 @@ def log(message):
     print(message, flush=True)
 
 
-def fetch(url, attempts=3):
+def fetch(url, attempts=3, headers=None):
     """URL を取得してバイト列を返す。一時的な失敗はリトライする。"""
-    request = urllib.request.Request(url, headers={"User-Agent": USER_AGENT})
+    request = urllib.request.Request(url, headers={"User-Agent": USER_AGENT, **(headers or {})})
     for attempt in range(1, attempts + 1):
         try:
             with urllib.request.urlopen(request, timeout=30) as response:
@@ -251,10 +251,52 @@ def yanmaga_episodes(feed):
     return episodes
 
 
+PIXIV_API = "https://comic.pixiv.net/api/app/works/{}/episodes/v2?order=desc"
+PIXIV_VIEWER = "https://comic.pixiv.net/viewer/stories/{}"
+
+
+def pixiv_episodes(feed):
+    """pixivコミックも RSS が無いので、サイト自身が使っている内部JSON APIを読む。
+
+    サイトのJSが付ける X-Requested-With: pixivcomic が無いと 403 になる。
+    state は readable / login_required（公開済みだが閲覧にログインが要る）/
+    not_publishing（非公開。episode が空で id もタイトルも無い）などを取る。
+    """
+    work_id = feed["workId"]
+    data = json.loads(fetch(PIXIV_API.format(work_id), headers={"X-Requested-With": "pixivcomic"}))
+
+    episodes = []
+    for item in data["data"]["episodes"]:
+        episode = item.get("episode")
+        if not episode or not episode.get("id"):
+            continue  # not_publishing など、中身の無い話は通知しない
+
+        start_ms = episode.get("read_start_at")
+        published_at = datetime.fromtimestamp(start_ms / 1000, timezone.utc) if start_ms else None
+        title = " ".join(filter(None, [episode.get("numbering_title"), episode.get("sub_title")]))
+
+        episodes.append({
+            "key": str(episode["id"]),
+            "title": title or "（無題）",
+            "link": PIXIV_VIEWER.format(episode["id"]),
+            "author": feed.get("author", ""),
+            "thumbnail": episode.get("thumbnail_image_url", ""),
+            "published_at": published_at,
+        })
+
+    if not episodes:
+        raise ValueError("話が1件も取れなかった（APIの形式が変わった可能性）")
+
+    # 通知用に古い順へ並べる
+    episodes.sort(key=lambda e: e["published_at"] or datetime.min.replace(tzinfo=timezone.utc))
+    return episodes
+
+
 SOURCES = {
     "rss": rss_episodes,
     "comicwalker": comicwalker_episodes,
     "yanmaga": yanmaga_episodes,
+    "pixiv": pixiv_episodes,
 }
 
 

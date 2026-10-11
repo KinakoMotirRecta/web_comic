@@ -43,6 +43,14 @@
       "site": "コミックDAYS"
     },
     {
+      "id": "jingai-to-jingai",
+      "type": "pixiv",
+      "name": "人外と人外とお付き合いしたい人間の話 / 釜タロ",
+      "workId": 13830,
+      "author": "釜タロ",
+      "site": "pixivコミック"
+    },
+    {
       "id": "bokudakeno-amakute-kowai-manager",
       "type": "comicwalker",
       "name": "僕だけの甘くてこわいマネージャーさんたち / 生瓶鵜義",

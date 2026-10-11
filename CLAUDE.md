@@ -44,12 +44,13 @@ Windows のコンソールでは日本語が化けるので `PYTHONIOENCODING=ut
 | `rss`（既定） | GigaViewer 系（ジャンプ+、COMIC Y-OURS など） | `/rss/series/<id>` |
 | `comicwalker` | カドコミ | 公開JSON API `/api/contents/details/work` |
 | `yanmaga` | ヤンマガWeb | 作品ページのHTMLを `html.parser` で解析 |
+| `pixiv` | pixivコミック | 内部JSON API `/api/app/works/<id>/episodes/v2`（`X-Requested-With: pixivcomic` が必須） |
 
 **新サイトを足すときは `SOURCES` に関数を1つ増やすだけでよい。** 関数は feed 設定を受け取り、
 `{key, title, link, author, thumbnail, published_at}` を持つ辞書のリストを**古い順**で返す。
 `key` は重複しない識別子（RSSならguid、他はエピソードIDやパス）。
 
-`comicwalker` と `yanmaga` は公式APIではなくサイト内部の実装に依存しているため、
+`comicwalker`・`yanmaga`・`pixiv` は公式APIではなくサイト内部の実装に依存しているため、
 サイト改修で壊れうる。**1話も取れなかった場合は例外を投げる**こと。黙って空リストを返すと
 「新着なし」と区別がつかず、更新を見逃す。
 

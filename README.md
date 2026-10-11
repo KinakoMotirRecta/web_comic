@@ -95,6 +95,24 @@ RSS も API も無いため、作品ページの HTML から話一覧を取り�
 
 ヤンマガWebは「次回公開予定」の話も一覧に入れてくるので、公開済みのものだけを通知する。
 
+### pixivコミック（`type: pixiv`）
+
+RSS が無いため、サイトが使っている内部 JSON API を読む。
+
+```json
+{
+  "id": "一意なID",
+  "type": "pixiv",
+  "name": "作品名 / 作者名",
+  "workId": 13830,
+  "author": "作者名",
+  "site": "pixivコミック"
+}
+```
+
+`workId` は作品ページの URL `https://comic.pixiv.net/works/<workId>` から取れる。
+非公開・削除済みの話（`not_publishing`）は中身が空なので自動的に除外される。
+
 ### 対応していないサイトの場合
 
 `check.py` の `SOURCES` に取得関数を1つ足せば対応できる。関数は
